@@ -1,0 +1,38 @@
+### Vision
+Understand Graph DB knowledge Discovery
+
+### Mission
+Create a graph DB based solution to exemplify the  Graph DB knowledge Discovery 
+
+### Actions
+- Create a ontology for transactionss (focus on fraude detection): My Guess is that we need to track accounts and transaction users may be some more 
+- Capture Bank Accounts and Transactions 
+- Allow Analyst to discover Fraud Rings 
+- Create sample data that can feed to Graph DB
+- Create UI for an Analyst to discover fraude
+
+### Reference 
+
+- @accelerate-fraud-detection-graph-database.pdf
+
+## Technology
+Language should be Pyton,  graph  database or anyother tech that facilate implementing. 
+
+###Documentation
+Create a comprehensive documentation about the solution
+version of documentations
+1. For a Novice, explaing concepts in basics
+2. To Professional, about the solution and process
+3. Create document explaining philosphyical foundation and history behind decisions 
+4. Create document walk through the python code
+5. Create FAQ 
+6. Create document how analyst can discover fraud through this application 
+
+### Architecture
+1. Create diagram on ontology for the fraude detection
+1. Use domain Driven design ( Entities, AntiCorruption layers etc. ) document all design decisions
+1. Create comprehensive architecture diagram, use PlantUML, DDD for sequrence and entity diagram
+2. If there's need to directly create diagrams for ease of conceptual understanding do it
+3. Create C4 diagramss
+
+

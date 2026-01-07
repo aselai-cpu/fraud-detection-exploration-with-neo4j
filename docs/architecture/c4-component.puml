@@ -1,0 +1,47 @@
+@startuml C4_Component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram for Fraud Detection System - Application Layer
+
+Container(webApp, "Web Application", "Flask", "REST API and Web UI")
+ContainerDb(graphDb, "Graph Database", "Neo4j", "Graph storage")
+
+Container_Boundary(appLayer, "Application Layer") {
+    Component(invService, "Fraud Investigation Service", "Python Service", "Orchestrates fraud investigations and pattern detection")
+    Component(reportService, "Report Generator", "Python Service", "Generates investigation reports")
+}
+
+Container_Boundary(domainLayer, "Domain Layer") {
+    Component(riskService, "Risk Scoring Service", "Domain Service", "Calculates risk scores for entities")
+    Component(fraudDetectService, "Fraud Detection Service", "Domain Service", "Detects fraud patterns using graph algorithms")
+    Component(ringService, "Fraud Ring Analysis Service", "Domain Service", "Analyzes and manages fraud rings")
+    Component(alertService, "Alert Service", "Domain Service", "Manages fraud alerts")
+
+    Component(entities, "Domain Entities", "Python Classes", "Account, Customer, Transaction, etc.")
+    Component(valueObjects, "Value Objects", "Python Classes", "Money, RiskScore, TransactionPattern, etc.")
+    Component(repositories, "Repository Interfaces", "Python Interfaces", "Abstract data access contracts")
+}
+
+Container_Boundary(infraLayer, "Infrastructure Layer (Anti-Corruption)") {
+    Component(neo4jRepos, "Neo4j Repositories", "Python/Neo4j Driver", "Concrete implementations of repositories")
+    Component(neo4jConn, "Neo4j Connection Manager", "Python/Neo4j Driver", "Manages database connections")
+}
+
+Rel(webApp, invService, "Uses")
+Rel(invService, riskService, "Uses")
+Rel(invService, fraudDetectService, "Uses")
+Rel(invService, ringService, "Uses")
+Rel(invService, alertService, "Uses")
+
+Rel(riskService, entities, "Uses")
+Rel(riskService, repositories, "Uses")
+Rel(fraudDetectService, entities, "Uses")
+Rel(fraudDetectService, repositories, "Uses")
+
+Rel(neo4jRepos, repositories, "Implements")
+Rel(neo4jRepos, neo4jConn, "Uses")
+Rel(neo4jConn, graphDb, "Connects to", "Bolt Protocol")
+
+@enduml

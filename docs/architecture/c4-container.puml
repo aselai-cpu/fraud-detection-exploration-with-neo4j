@@ -1,0 +1,27 @@
+@startuml C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram for Fraud Detection System
+
+Person(analyst, "Fraud Analyst", "Investigates fraud patterns")
+
+System_Boundary(fraudSystem, "Fraud Detection System") {
+    Container(webApp, "Web Application", "Flask/Python", "Provides fraud investigation UI and REST API")
+    Container(appService, "Application Services", "Python", "Orchestrates fraud detection workflows and business logic")
+    Container(domainLayer, "Domain Layer", "Python/DDD", "Core business entities, value objects, and domain services")
+    ContainerDb(graphDb, "Graph Database", "Neo4j", "Stores accounts, transactions, customers and their relationships")
+    Container(dataGen, "Data Generator", "Python/Faker", "Generates sample fraud data for testing and demos")
+}
+
+System_Ext(bankingSystem, "Banking System", "Source of transaction data")
+
+Rel(analyst, webApp, "Uses", "HTTPS")
+Rel(webApp, appService, "Uses", "Function calls")
+Rel(appService, domainLayer, "Uses", "Function calls")
+Rel(domainLayer, graphDb, "Reads/Writes", "Bolt Protocol/Cypher")
+Rel(dataGen, graphDb, "Populates", "Bolt Protocol/Cypher")
+Rel(bankingSystem, dataGen, "Provides data", "API/ETL")
+
+@enduml

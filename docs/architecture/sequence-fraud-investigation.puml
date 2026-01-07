@@ -1,0 +1,68 @@
+@startuml Fraud Investigation Flow
+title Fraud Investigation Workflow - Account Investigation
+
+actor Analyst
+participant "Web UI" as UI
+participant "Flask API" as API
+participant "Investigation\nService" as InvService
+participant "Risk Scoring\nService" as RiskService
+participant "Account\nRepository" as AccRepo
+participant "Transaction\nRepository" as TxnRepo
+participant "Graph Query\nRepository" as GraphRepo
+database "Neo4j" as DB
+
+Analyst -> UI: Investigate account
+activate UI
+
+UI -> API: GET /api/accounts/{id}/investigate
+activate API
+
+API -> InvService: investigate_account(account_id)
+activate InvService
+
+InvService -> AccRepo: find_by_id(account_id)
+activate AccRepo
+AccRepo -> DB: MATCH (a:Account {account_id: $id})
+DB --> AccRepo: Account data
+AccRepo --> InvService: Account
+deactivate AccRepo
+
+InvService -> TxnRepo: find_by_account(account_id, last_30_days)
+activate TxnRepo
+TxnRepo -> DB: MATCH (t:Transaction)-[:DEBITED_FROM|CREDITED_TO]->(a:Account)
+DB --> TxnRepo: Transaction list
+TxnRepo --> InvService: Transactions[]
+deactivate TxnRepo
+
+InvService -> RiskService: calculate_account_risk(account)
+activate RiskService
+
+RiskService -> TxnRepo: count_transactions_in_timeframe(account_id, 60min)
+activate TxnRepo
+TxnRepo -> DB: COUNT query
+DB --> TxnRepo: Count
+TxnRepo --> RiskService: velocity_count
+deactivate TxnRepo
+
+RiskService -> RiskService: Analyze patterns\nCalculate risk factors
+RiskService --> InvService: RiskScore{score, factors}
+deactivate RiskService
+
+InvService -> GraphRepo: get_entity_neighborhood(account_id, depth=2)
+activate GraphRepo
+GraphRepo -> DB: MATCH path = (a)-[*1..2]-(connected)
+DB --> GraphRepo: Graph data
+GraphRepo --> InvService: neighborhood{nodes, edges}
+deactivate GraphRepo
+
+InvService --> API: Investigation result
+deactivate InvService
+
+API --> UI: JSON response
+deactivate API
+
+UI -> UI: Render investigation\nresults and visualization
+UI --> Analyst: Display account\nanalysis
+deactivate UI
+
+@enduml

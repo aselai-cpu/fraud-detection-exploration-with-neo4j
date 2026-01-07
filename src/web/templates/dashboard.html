@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection System - Analyst Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .stat-card h3 {
+            color: #64748b;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.75rem;
+        }
+
+        .stat-card .value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .stat-card.critical .value {
+            color: #dc2626;
+        }
+
+        .stat-card.warning .value {
+            color: #f59e0b;
+        }
+
+        .stat-card.info .value {
+            color: #3b82f6;
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #f8fafc;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .panel-header h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .panel-body {
+            padding: 1.5rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #475569;
+        }
+
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #b91c1c;
+        }
+
+        .search-box {
+            margin-bottom: 1.5rem;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.875rem;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .badge-critical {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .badge-high {
+            background: #fef3c7;
+            color: #f59e0b;
+        }
+
+        .badge-medium {
+            background: #dbeafe;
+            color: #3b82f6;
+        }
+
+        .badge-low {
+            background: #d1fae5;
+            color: #10b981;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            font-weight: 500;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #94a3b8;
+        }
+
+        .error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+        }
+
+        @media (max-width: 768px) {
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Fraud Detection System</h1>
+        <p>Real-time fraud monitoring and investigation dashboard</p>
+    </div>
+
+    <div class="container">
+        <div id="stats" class="stats-grid">
+            <div class="stat-card critical">
+                <h3>Flagged Transactions</h3>
+                <div class="value" id="flagged-count">-</div>
+            </div>
+            <div class="stat-card warning">
+                <h3>High Risk Accounts</h3>
+                <div class="value" id="risk-accounts-count">-</div>
+            </div>
+            <div class="stat-card info">
+                <h3>Active Fraud Rings</h3>
+                <div class="value" id="fraud-rings-count">-</div>
+            </div>
+            <div class="stat-card critical">
+                <h3>Critical Alerts</h3>
+                <div class="value" id="critical-alerts-count">-</div>
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button class="btn btn-primary" onclick="runFraudDetection()">Run Fraud Detection</button>
+            <button class="btn btn-secondary" onclick="refreshDashboard()">Refresh Dashboard</button>
+            <button class="btn btn-secondary" onclick="viewDatabaseStats()">Database Stats</button>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Fraud Pattern Analysis</h2>
+            </div>
+            <div class="panel-body">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('high-risk')">High Risk Accounts</button>
+                    <button class="tab" onclick="switchTab('circular-flow')">Circular Flows</button>
+                    <button class="tab" onclick="switchTab('fan-out')">Fan-Out Patterns</button>
+                    <button class="tab" onclick="switchTab('fan-in')">Fan-In Patterns</button>
+                    <button class="tab" onclick="switchTab('mule-accounts')">Mule Accounts</button>
+                    <button class="tab" onclick="switchTab('flagged-txns')">Flagged Transactions</button>
+                </div>
+
+                <div id="high-risk" class="tab-content active">
+                    <div class="table-container">
+                        <table id="high-risk-table">
+                            <thead>
+                                <tr>
+                                    <th>Account #</th>
+                                    <th>Risk Score</th>
+                                    <th>Risk Category</th>
+                                    <th>Status</th>
+                                    <th>Flagged Txns</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="circular-flow" class="tab-content">
+                    <div class="table-container">
+                        <table id="circular-flow-table">
+                            <thead>
+                                <tr>
+                                    <th>Account #</th>
+                                    <th>Risk Score</th>
+                                    <th>Risk Category</th>
+                                    <th>Status</th>
+                                    <th>Flagged Txns</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="loading">Click "Run Fraud Detection" to load data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="fan-out" class="tab-content">
+                    <div class="table-container">
+                        <table id="fan-out-table">
+                            <thead>
+                                <tr>
+                                    <th>Account #</th>
+                                    <th>Risk Score</th>
+                                    <th>Risk Category</th>
+                                    <th>Status</th>
+                                    <th>Flagged Txns</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="loading">Click "Run Fraud Detection" to load data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="fan-in" class="tab-content">
+                    <div class="table-container">
+                        <table id="fan-in-table">
+                            <thead>
+                                <tr>
+                                    <th>Account #</th>
+                                    <th>Risk Score</th>
+                                    <th>Risk Category</th>
+                                    <th>Status</th>
+                                    <th>Flagged Txns</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="loading">Click "Run Fraud Detection" to load data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="mule-accounts" class="tab-content">
+                    <div class="table-container">
+                        <table id="mule-accounts-table">
+                            <thead>
+                                <tr>
+                                    <th>Account #</th>
+                                    <th>Risk Score</th>
+                                    <th>Risk Category</th>
+                                    <th>Status</th>
+                                    <th>Flagged Txns</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="5" class="loading">Click "Run Fraud Detection" to load data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="flagged-txns" class="tab-content">
+                    <div class="table-container">
+                        <table id="flagged-transactions-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Amount</th>
+                                    <th>Type</th>
+                                    <th>Fraud Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr><td colspan="4" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Investigation Search</h2>
+            </div>
+            <div class="panel-body">
+                <div class="search-box">
+                    <input type="text" id="search-input" placeholder="Search by account ID, customer ID, or email..." onkeypress="handleSearch(event)">
+                </div>
+                <div id="search-results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        async function fetchDashboardSummary() {
+            try {
+                const response = await fetch(`${API_BASE}/dashboard/summary`);
+                const data = await response.json();
+
+                document.getElementById('flagged-count').textContent = data.flagged_transactions_count || 0;
+                document.getElementById('risk-accounts-count').textContent = data.high_risk_accounts_count || 0;
+                document.getElementById('fraud-rings-count').textContent = data.active_fraud_rings || 0;
+                document.getElementById('critical-alerts-count').textContent = data.critical_alerts || 0;
+            } catch (error) {
+                console.error('Error fetching summary:', error);
+            }
+        }
+
+        async function fetchHighRiskAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/accounts/high-risk?limit=10`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#high-risk-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const row = tbody.insertRow();
+                        const categoryBadge = getRiskCategoryBadge(account.risk_category || getRiskCategory(account.risk_score));
+                        row.innerHTML = `
+                            <td>${account.account_number}</td>
+                            <td><span class="badge badge-${getRiskBadgeClass(account.risk_score)}">${account.risk_score.toFixed(1)}</span></td>
+                            <td>${categoryBadge}</td>
+                            <td>${account.status}</td>
+                            <td>${account.flagged_count || 0}</td>
+                        `;
+                        row.style.cursor = 'pointer';
+                        row.onclick = () => investigateAccount(account.account_id);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">No high-risk accounts found</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching high-risk accounts:', error);
+            }
+        }
+
+        async function fetchFlaggedTransactions() {
+            try {
+                const response = await fetch(`${API_BASE}/transactions/flagged?limit=10`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#flagged-transactions-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.transactions && data.transactions.length > 0) {
+                    data.transactions.forEach(txn => {
+                        const row = tbody.insertRow();
+                        const date = new Date(txn.timestamp);
+                        row.innerHTML = `
+                            <td>${date.toLocaleString()}</td>
+                            <td>${txn.currency} ${txn.amount.toFixed(2)}</td>
+                            <td>${txn.transaction_type}</td>
+                            <td><span class="badge badge-${getFraudBadgeClass(txn.fraud_score)}">${(txn.fraud_score * 100).toFixed(0)}%</span></td>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" class="loading">No flagged transactions found</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching flagged transactions:', error);
+            }
+        }
+
+        function getRiskBadgeClass(score) {
+            if (score >= 85) return 'critical';
+            if (score >= 60) return 'high';
+            if (score >= 30) return 'medium';
+            return 'low';
+        }
+
+        function getRiskCategory(score) {
+            if (score >= 80) return 'CRITICAL';
+            if (score >= 60) return 'HIGH';
+            if (score >= 40) return 'MEDIUM';
+            return 'LOW';
+        }
+
+        function getRiskCategoryBadge(category) {
+            const badgeClass = category.toLowerCase();
+            return `<span class="badge badge-${badgeClass}">${category}</span>`;
+        }
+
+        function getFraudBadgeClass(score) {
+            if (score >= 0.8) return 'critical';
+            if (score >= 0.6) return 'high';
+            if (score >= 0.4) return 'medium';
+            return 'low';
+        }
+
+        async function runFraudDetection() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Running Detection...';
+
+            try {
+                const response = await fetch(`${API_BASE}/fraud-patterns/detect`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                const riskInfo = data.risk_scoring || {};
+                alert(`Fraud Detection Complete!\n\n🔴 Fraud Patterns Detected:\n   • Circular Flows: ${data.circular_flow?.length || 0}\n   • Fan-Out Patterns: ${data.fan_out?.length || 0}\n   • Fan-In Patterns: ${data.fan_in?.length || 0}\n   • Mule Accounts: ${data.mule_accounts?.length || 0}\n\n📊 Risk Scoring Results:\n   • Accounts Evaluated: ${riskInfo.accounts_evaluated || 0}\n   • High-Risk Accounts: ${riskInfo.high_risk_accounts || 0}\n   • Flagged Transactions: ${riskInfo.flagged_transactions_processed || 0}`);
+
+                refreshDashboard();
+            } catch (error) {
+                alert('Error running fraud detection: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Fraud Detection';
+            }
+        }
+
+        function switchTab(tabId) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+
+            // Load data for the tab if not already loaded
+            if (tabId === 'circular-flow') {
+                fetchCircularFlowAccounts();
+            } else if (tabId === 'fan-out') {
+                fetchFanOutAccounts();
+            } else if (tabId === 'fan-in') {
+                fetchFanInAccounts();
+            } else if (tabId === 'mule-accounts') {
+                fetchMuleAccounts();
+            }
+        }
+
+        async function fetchCircularFlowAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/fraud-patterns/circular-flow/accounts`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#circular-flow-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const row = tbody.insertRow();
+                        const categoryBadge = getRiskCategoryBadge(account.risk_category || getRiskCategory(account.risk_score));
+                        row.innerHTML = `
+                            <td>${account.account_number}</td>
+                            <td><span class="badge badge-${getRiskBadgeClass(account.risk_score)}">${account.risk_score.toFixed(1)}</span></td>
+                            <td>${categoryBadge}</td>
+                            <td>${account.status}</td>
+                            <td>${account.flagged_count || 0}</td>
+                        `;
+                        row.style.cursor = 'pointer';
+                        row.onclick = () => investigateAccount(account.account_id);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">No accounts found in circular flows</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching circular flow accounts:', error);
+            }
+        }
+
+        async function fetchFanOutAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/fraud-patterns/fan-out/accounts`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#fan-out-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const row = tbody.insertRow();
+                        const categoryBadge = getRiskCategoryBadge(account.risk_category || getRiskCategory(account.risk_score));
+                        row.innerHTML = `
+                            <td>${account.account_number}</td>
+                            <td><span class="badge badge-${getRiskBadgeClass(account.risk_score)}">${account.risk_score.toFixed(1)}</span></td>
+                            <td>${categoryBadge}</td>
+                            <td>${account.status}</td>
+                            <td>${account.flagged_count || 0}</td>
+                        `;
+                        row.style.cursor = 'pointer';
+                        row.onclick = () => investigateAccount(account.account_id);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">No accounts found in fan-out patterns</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching fan-out accounts:', error);
+            }
+        }
+
+        async function fetchFanInAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/fraud-patterns/fan-in/accounts`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#fan-in-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const row = tbody.insertRow();
+                        const categoryBadge = getRiskCategoryBadge(account.risk_category || getRiskCategory(account.risk_score));
+                        row.innerHTML = `
+                            <td>${account.account_number}</td>
+                            <td><span class="badge badge-${getRiskBadgeClass(account.risk_score)}">${account.risk_score.toFixed(1)}</span></td>
+                            <td>${categoryBadge}</td>
+                            <td>${account.status}</td>
+                            <td>${account.flagged_count || 0}</td>
+                        `;
+                        row.style.cursor = 'pointer';
+                        row.onclick = () => investigateAccount(account.account_id);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">No accounts found in fan-in patterns</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching fan-in accounts:', error);
+            }
+        }
+
+        async function fetchMuleAccounts() {
+            try {
+                const response = await fetch(`${API_BASE}/fraud-patterns/mule-accounts`);
+                const data = await response.json();
+
+                const tbody = document.querySelector('#mule-accounts-table tbody');
+                tbody.innerHTML = '';
+
+                if (data.accounts && data.accounts.length > 0) {
+                    data.accounts.forEach(account => {
+                        const row = tbody.insertRow();
+                        const categoryBadge = getRiskCategoryBadge(account.risk_category || getRiskCategory(account.risk_score));
+                        row.innerHTML = `
+                            <td>${account.account_number}</td>
+                            <td><span class="badge badge-${getRiskBadgeClass(account.risk_score)}">${account.risk_score.toFixed(1)}</span></td>
+                            <td>${categoryBadge}</td>
+                            <td>${account.status}</td>
+                            <td>${account.flagged_count || 0}</td>
+                        `;
+                        row.style.cursor = 'pointer';
+                        row.onclick = () => investigateAccount(account.account_id);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5" class="loading">No mule accounts detected</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error fetching mule accounts:', error);
+            }
+        }
+
+        function refreshDashboard() {
+            fetchDashboardSummary();
+            fetchHighRiskAccounts();
+            fetchFlaggedTransactions();
+        }
+
+        async function investigateAccount(accountId) {
+            try {
+                const response = await fetch(`${API_BASE}/accounts/${accountId}/investigate`);
+                const data = await response.json();
+
+                alert(`Account Investigation\n\nAccount: ${data.account?.account_number}\nRisk Score: ${data.account?.risk_score}\nTransactions (30d): ${data.transaction_count_30d}\nFlagged: ${data.flagged_transactions}\n\nRisk Factors:\n${data.risk_score?.factors.join('\n')}`);
+            } catch (error) {
+                alert('Error investigating account: ' + error.message);
+            }
+        }
+
+        async function handleSearch(event) {
+            if (event.key === 'Enter') {
+                const query = document.getElementById('search-input').value;
+                const resultsDiv = document.getElementById('search-results');
+
+                try {
+                    const response = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+                    const data = await response.json();
+
+                    if (data.results && data.results.length > 0) {
+                        resultsDiv.innerHTML = '<pre>' + JSON.stringify(data.results, null, 2) + '</pre>';
+                    } else {
+                        resultsDiv.innerHTML = '<p class="loading">No results found</p>';
+                    }
+                } catch (error) {
+                    resultsDiv.innerHTML = '<p class="error">Error: ' + error.message + '</p>';
+                }
+            }
+        }
+
+        async function viewDatabaseStats() {
+            try {
+                const response = await fetch(`${API_BASE}/database/stats`);
+                const data = await response.json();
+                alert('Database Statistics:\n\n' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                alert('Error fetching database stats: ' + error.message);
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshDashboard();
+            // Auto-refresh every 30 seconds
+            setInterval(refreshDashboard, 30000);
+        });
+    </script>
+</body>
+</html>

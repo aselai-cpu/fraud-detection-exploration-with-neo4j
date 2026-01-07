@@ -1,0 +1,21 @@
+@startuml C4_Context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title System Context Diagram for Fraud Detection System
+
+Person(analyst, "Fraud Analyst", "Financial crime investigator who analyzes suspicious patterns and investigates potential fraud")
+
+System(fraudSystem, "Fraud Detection System", "Enables fraud analysts to discover, investigate, and manage fraud rings using graph-based pattern detection")
+
+System_Ext(bankingSystem, "Banking System", "Provides transaction and account data")
+System_Ext(kycSystem, "KYC/AML System", "Customer verification and compliance data")
+System_Ext(alertSystem, "Alert Management System", "Receives and manages fraud alerts")
+
+Rel(analyst, fraudSystem, "Investigates fraud patterns, views analytics", "HTTPS/Web UI")
+Rel(fraudSystem, bankingSystem, "Fetches transaction and account data", "API/ETL")
+Rel(fraudSystem, kycSystem, "Retrieves customer verification status", "API")
+Rel(fraudSystem, alertSystem, "Sends fraud alerts", "API/Queue")
+
+@enduml

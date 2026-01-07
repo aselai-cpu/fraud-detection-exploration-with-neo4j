@@ -1,0 +1,108 @@
+@startuml Fraud Pattern Detection
+title Fraud Pattern Detection Workflow
+
+actor Analyst
+participant "Web UI" as UI
+participant "Flask API" as API
+participant "Investigation\nService" as InvService
+participant "Fraud Detection\nService" as FraudService
+participant "Graph Query\nRepository" as GraphRepo
+participant "Fraud Ring\nService" as RingService
+participant "Fraud Ring\nRepository" as RingRepo
+database "Neo4j" as DB
+
+Analyst -> UI: Click "Run Fraud Detection"
+activate UI
+
+UI -> API: POST /api/fraud-patterns/detect
+activate API
+
+API -> InvService: detect_fraud_patterns()
+activate InvService
+
+group Circular Flow Detection
+    InvService -> FraudService: detect_circular_flow(min_cycle=3)
+    activate FraudService
+    FraudService -> GraphRepo: find_circular_transactions()
+    activate GraphRepo
+    GraphRepo -> DB: MATCH path = (a:Account)-[*3..8]-(a)
+    DB --> GraphRepo: Circular paths
+    GraphRepo --> FraudService: Transaction cycles
+    deactivate GraphRepo
+    FraudService -> FraudService: Analyze patterns\nCalculate confidence
+    FraudService --> InvService: TransactionPattern[]
+    deactivate FraudService
+end
+
+group Fan-Out Detection
+    InvService -> FraudService: detect_fan_out(min_recipients=5)
+    activate FraudService
+    FraudService -> GraphRepo: detect_fan_out_pattern()
+    activate GraphRepo
+    GraphRepo -> DB: MATCH (from)<-[:DEBITED_FROM]-(t)-[:CREDITED_TO]->(to)\nGROUP BY from\nHAVING count(to) >= 5
+    DB --> GraphRepo: Fan-out patterns
+    GraphRepo --> FraudService: Pattern results
+    deactivate GraphRepo
+    FraudService --> InvService: TransactionPattern[]
+    deactivate FraudService
+end
+
+group Fan-In Detection
+    InvService -> FraudService: detect_fan_in(min_senders=5)
+    activate FraudService
+    FraudService -> GraphRepo: detect_fan_in_pattern()
+    activate GraphRepo
+    GraphRepo -> DB: Similar query for fan-in
+    DB --> GraphRepo: Fan-in patterns
+    GraphRepo --> FraudService: Pattern results
+    deactivate GraphRepo
+    FraudService --> InvService: TransactionPattern[]
+    deactivate FraudService
+end
+
+group Mule Account Detection
+    InvService -> FraudService: detect_mule_accounts()
+    activate FraudService
+    FraudService -> GraphRepo: detect_mule_accounts(min_throughput)
+    activate GraphRepo
+    GraphRepo -> DB: MATCH rapid in/out flows\nWITH balance analysis
+    DB --> GraphRepo: Suspected mule accounts
+    GraphRepo --> FraudService: Account[]
+    deactivate GraphRepo
+    FraudService --> InvService: Account[]
+    deactivate FraudService
+end
+
+group Create Fraud Rings
+    loop For each high-confidence pattern
+        InvService -> RingService: create_fraud_ring_from_pattern(pattern)
+        activate RingService
+        RingService -> RingRepo: save(FraudRing)
+        activate RingRepo
+        RingRepo -> DB: CREATE (fr:FraudRing {...})
+        DB --> RingRepo: Saved ring
+        RingRepo --> RingService: FraudRing
+        deactivate RingRepo
+
+        RingService -> RingRepo: link_account_to_ring(ring_id, account_id)
+        activate RingRepo
+        RingRepo -> DB: MERGE (fr)-[:INVOLVES_ACCOUNT]->(a)
+        RingRepo --> RingService: Success
+        deactivate RingRepo
+
+        RingService --> InvService: Created ring
+        deactivate RingService
+    end
+end
+
+InvService --> API: Detection results
+deactivate InvService
+
+API --> UI: JSON response
+deactivate API
+
+UI -> UI: Display detection\nresults summary
+UI --> Analyst: Show fraud patterns found
+deactivate UI
+
+@enduml

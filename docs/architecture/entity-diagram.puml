@@ -1,0 +1,193 @@
+@startuml Domain Entity Diagram
+title Domain Model - Entities and Relationships
+
+' Entities
+class Customer {
+    +customer_id: String
+    +first_name: String
+    +last_name: String
+    +email: String
+    +phone: String
+    +date_of_birth: DateTime
+    +ssn_hash: String
+    +address: String
+    +city: String
+    +country: String
+    +customer_since: DateTime
+    +kyc_status: KYCStatus
+    +risk_level: RiskLevel
+    --
+    +full_name(): String
+}
+
+class Account {
+    +account_id: String
+    +account_number: String
+    +account_type: AccountType
+    +status: AccountStatus
+    +created_date: DateTime
+    +risk_score: Float
+    +country: String
+    +currency: String
+    +balance: Float
+}
+
+class Transaction {
+    +transaction_id: String
+    +amount: Float
+    +currency: String
+    +timestamp: DateTime
+    +transaction_type: TransactionType
+    +status: TransactionStatus
+    +channel: TransactionChannel
+    +description: String
+    +is_flagged: Boolean
+    +fraud_score: Float
+    +from_account_id: String
+    +to_account_id: String
+}
+
+class Device {
+    +device_id: String
+    +device_type: String
+    +os: String
+    +browser: String
+    +first_seen: DateTime
+    +last_seen: DateTime
+    +is_trusted: Boolean
+}
+
+class IPAddress {
+    +ip_address: String
+    +country: String
+    +city: String
+    +is_proxy: Boolean
+    +is_vpn: Boolean
+    +risk_score: Float
+    +first_seen: DateTime
+    +last_seen: DateTime
+}
+
+class Merchant {
+    +merchant_id: String
+    +merchant_name: String
+    +category: String
+    +country: String
+    +risk_level: RiskLevel
+    +is_verified: Boolean
+}
+
+class FraudRing {
+    +ring_id: String
+    +detected_date: DateTime
+    +confidence_score: Float
+    +status: FraudRingStatus
+    +total_amount: Float
+    +member_count: Integer
+    +pattern_type: String
+    +description: String
+}
+
+class Alert {
+    +alert_id: String
+    +alert_type: String
+    +severity: RiskLevel
+    +created_at: DateTime
+    +resolved_at: DateTime
+    +is_resolved: Boolean
+    +assigned_to: String
+    +notes: String
+    +related_entities: List<String>
+}
+
+' Value Objects
+class Money <<ValueObject>> {
+    +amount: Float
+    +currency: String
+    --
+    +add(Money): Money
+    +subtract(Money): Money
+}
+
+class RiskScore <<ValueObject>> {
+    +score: Float
+    +factors: List<String>
+    +calculated_at: DateTime
+    --
+    +risk_level(): String
+}
+
+class TransactionPattern <<ValueObject>> {
+    +pattern_type: String
+    +confidence: Float
+    +evidence: List<String>
+    +detected_at: DateTime
+}
+
+' Relationships
+Customer "1" --> "*" Account : owns >
+Account "1" <-- "*" Transaction : debited_from <
+Account "1" <-- "*" Transaction : credited_to <
+Customer "*" --> "*" Device : uses >
+Transaction "*" --> "1" Device : from_device >
+Transaction "*" --> "1" IPAddress : from_ip >
+Transaction "*" --> "0..1" Merchant : sent_to >
+FraudRing "*" --> "*" Customer : involves >
+FraudRing "*" --> "*" Account : involves >
+Alert "*" --> "*" Account : related_to >
+
+' Enums
+enum AccountType {
+    CHECKING
+    SAVINGS
+    CREDIT
+}
+
+enum AccountStatus {
+    ACTIVE
+    SUSPENDED
+    CLOSED
+}
+
+enum RiskLevel {
+    LOW
+    MEDIUM
+    HIGH
+    CRITICAL
+}
+
+enum KYCStatus {
+    VERIFIED
+    PENDING
+    FAILED
+}
+
+enum TransactionType {
+    TRANSFER
+    WITHDRAWAL
+    DEPOSIT
+    PAYMENT
+}
+
+enum TransactionStatus {
+    COMPLETED
+    PENDING
+    FAILED
+    REVERSED
+}
+
+enum TransactionChannel {
+    ONLINE
+    ATM
+    BRANCH
+    MOBILE
+}
+
+enum FraudRingStatus {
+    INVESTIGATING
+    CONFIRMED
+    FALSE_POSITIVE
+    RESOLVED
+}
+
+@enduml
