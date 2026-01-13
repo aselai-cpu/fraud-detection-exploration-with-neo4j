@@ -1,0 +1,46 @@
+@startuml Money Mule Detection
+title Money Mule Account Pattern
+
+' This diagram shows money mule accounts that receive and quickly forward funds
+' with minimal retention time, indicating flow-through accounts
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "Money Mule Pattern" {
+    rectangle "Source Account\n(Fraudster)\nSends: $15,000" as Source #FFE6E6
+    
+    rectangle "Mule Account\n(Flow-Through)\nReceives: $15,000\nForwards: $14,500\nHold Time: 5 hours\nBalance: ~$0\nThroughput: High" as Mule #FFF4E6
+    
+    rectangle "Destination Account\n(Final Recipient)\nReceives: $14,500" as Destination #E6F3FF
+    
+    Source --> Mule : "Txn1: $15,000\nMonday 9:00 AM\nCREDITED_TO"
+    Mule --> Destination : "Txn2: $14,500\nMonday 2:00 PM\n(5 hours later)\nDEBITED_FROM"
+    
+    note right of Mule
+        **Mule Characteristics:**
+        - High throughput (≥$10,000)
+        - Quick turnaround (≤48 hours)
+        - Money in ≈ Money out (within 10%)
+        - Minimal balance retention
+        - Just a conduit, not storage
+    end note
+    
+    note bottom of Mule
+        **Detection Formula:**
+        total_in ≥ $10,000
+        AND hold_time ≤ 48 hours
+        AND |total_in - total_out| / total_in < 0.10
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#FFE6E6> | Source (Fraudster) |
+    | <#FFF4E6> | Mule Account (Suspicious) |
+    | <#E6F3FF> | Destination (Final Recipient) |
+    | **Hold Time** | Time between receive and forward |
+    | **Throughput** | Total volume processed |
+endlegend
+
+@enduml

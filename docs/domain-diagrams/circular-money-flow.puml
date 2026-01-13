@@ -1,0 +1,41 @@
+@startuml Circular Money Flow Pattern
+title Circular Money Flow - Money Laundering Pattern
+
+' This diagram shows how money circulates through multiple accounts
+' and returns to the origin, indicating money laundering layering
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "Circular Money Flow Pattern" {
+    rectangle "Account A\n(Criminal)\nInitial: $10,000" as AccountA #FFE6E6
+    rectangle "Account B\n(Mule 1)\nReceives: $10,000\nForwards: $9,500" as AccountB #FFF4E6
+    rectangle "Account C\n(Mule 2)\nReceives: $9,500\nForwards: $9,000" as AccountC #E6F3FF
+    rectangle "Account D\n(Mule 3)\nReceives: $9,000\nReturns: $8,500" as AccountD #E6FFE6
+    
+    AccountA --> AccountB : "Txn1: $10,000\nRound 1\nDEBITED_FROM"
+    AccountB --> AccountC : "Txn2: $9,500\nRound 1\nDEBITED_FROM"
+    AccountC --> AccountD : "Txn3: $9,000\nRound 1\nDEBITED_FROM"
+    AccountD --> AccountA : "Txn4: $8,500\nRound 1\nCREDITED_TO"
+    
+    note right of AccountA
+        **Pattern Characteristics:**
+        - Money flows in a circle
+        - Amount decreases each hop
+        - Multiple rounds possible
+        - Short timeframes (hours/days)
+        - High fraud score
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#FFE6E6> | Source Account (Criminal) |
+    | <#FFF4E6> | Intermediate Account (Mule 1) |
+    | <#E6F3FF> | Intermediate Account (Mule 2) |
+    | <#E6FFE6> | Intermediate Account (Mule 3) |
+    | **Red Arrow** | Money Flow Direction |
+    | **Amount** | Decreases each hop (fees) |
+endlegend
+
+@enduml

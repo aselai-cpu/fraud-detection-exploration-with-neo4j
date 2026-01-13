@@ -1,0 +1,43 @@
+@startuml Fan Out Pattern
+title Fan-Out Pattern - Structuring and Distribution
+
+' This diagram shows one account distributing money to many recipients
+' indicating structuring or smurfing to avoid reporting thresholds
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "Fan-Out Pattern" {
+    rectangle "Source Account\n(Structuring)\nTotal: $80,000\nTimeframe: 2 hours\nRecipients: 15" as Source #FFE6E6
+    
+    rectangle "Recipient 1\n$5,000" as R1 #E6F3FF
+    rectangle "Recipient 2\n$5,000" as R2 #E6F3FF
+    rectangle "Recipient 3\n$5,000" as R3 #E6F3FF
+    rectangle "Recipient ...\n..." as RDots #E6F3FF
+    rectangle "Recipient 15\n$5,000" as R15 #E6F3FF
+    
+    Source --> R1 : "Txn1: $5,000\n+0 min\nDEBITED_FROM"
+    Source --> R2 : "Txn2: $5,000\n+5 min\nDEBITED_FROM"
+    Source --> R3 : "Txn3: $5,000\n+10 min\nDEBITED_FROM"
+    Source --> RDots : "..."
+    Source --> R15 : "Txn15: $5,000\n+70 min\nDEBITED_FROM"
+    
+    note right of Source
+        **Pattern Characteristics:**
+        - One source, many recipients
+        - Similar amounts (under $10k)
+        - Rapid succession (minutes apart)
+        - Total exceeds reporting threshold
+        - Structured to avoid detection
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#FFE6E6> | Source Account (Structuring) |
+    | <#E6F3FF> | Recipient Accounts (Mules) |
+    | **Amount** | Typically under $10,000 each |
+    | **Timing** | Minutes apart |
+endlegend
+
+@enduml

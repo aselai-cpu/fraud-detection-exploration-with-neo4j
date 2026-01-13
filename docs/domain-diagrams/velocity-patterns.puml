@@ -1,0 +1,68 @@
+@startuml Velocity Patterns
+title Velocity Pattern - High-Frequency Transactions
+
+' This diagram shows velocity patterns where accounts have too many
+' transactions in a short timeframe, indicating potential fraud
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "High-Velocity Transaction Pattern" {
+    rectangle "Suspicious Account\nAccount ID: acc_12345\nRisk Score: 85" as Account #FFE6E6
+    
+    rectangle "Transaction 1\nAmount: $500\nTime: 10:00 AM\nChannel: ONLINE" as T1 #E6F3FF
+    rectangle "Transaction 2\nAmount: $750\nTime: 10:03 AM\nChannel: ONLINE" as T2 #E6F3FF
+    rectangle "Transaction 3\nAmount: $300\nTime: 10:06 AM\nChannel: ONLINE" as T3 #E6F3FF
+    rectangle "Transaction ...\n..." as TDots #E6F3FF
+    rectangle "Transaction 18\nAmount: $600\nTime: 10:51 AM\nChannel: ONLINE" as T18 #E6F3FF
+    
+    Account --> T1 : "Txn1\n+0 min\nDEBITED_FROM"
+    Account --> T2 : "Txn2\n+3 min\nDEBITED_FROM"
+    Account --> T3 : "Txn3\n+6 min\nDEBITED_FROM"
+    Account --> TDots : "..."
+    Account --> T18 : "Txn18\n+51 min\nDEBITED_FROM"
+    
+    note right of Account
+        **Velocity Characteristics:**
+        - 18 transactions in 51 minutes
+        - Average: 1 transaction per 2.8 minutes
+        - Total amount: ~$12,000
+        - Same device/IP used
+        - All flagged as suspicious
+    end note
+    
+    note bottom of Account
+        **Detection Rule:**
+        count(transactions) > 10
+        AND timeframe < 60 minutes
+        AND same_device = true
+        → HIGH RISK
+    end note
+}
+
+package "Time-Based Velocity Analysis" {
+    rectangle "Time Window\nDuration: 60 minutes\nStart: 10:00 AM\nEnd: 11:00 AM" as Window #FFF4E6
+    
+    rectangle "Transaction Count\nCount: 18\nThreshold: 10\nStatus: EXCEEDED" as Count #E6F3FF
+    
+    Window --> Count : "contains"
+    
+    note right of Count
+        **Thresholds:**
+        - Normal: < 5 transactions/hour
+        - Suspicious: 5-10 transactions/hour
+        - High Risk: > 10 transactions/hour
+        - Critical: > 20 transactions/hour
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#FFE6E6> | Suspicious Account |
+    | <#E6F3FF> | Transactions |
+    | <#FFF4E6> | Time Window |
+    | **Velocity** | Transactions per time unit |
+    | **Threshold** | Configurable limit |
+endlegend
+
+@enduml

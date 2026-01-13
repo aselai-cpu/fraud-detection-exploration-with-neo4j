@@ -1,0 +1,59 @@
+@startuml Shared Infrastructure Pattern
+title Shared Infrastructure - Device and IP Patterns
+
+' This diagram shows how multiple accounts/customers sharing devices or IPs
+' indicates potential fraud rings or account takeover
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "Shared Device Pattern" {
+    rectangle "Customer A\nRisk Level: HIGH" as CustomerA #FFE6E6
+    rectangle "Customer B\nRisk Level: HIGH" as CustomerB #FFE6E6
+    rectangle "Customer C\nRisk Level: MEDIUM" as CustomerC #FFE6E6
+    
+    rectangle "Shared Device\nDevice ID: dev_12345\nType: Desktop\nOS: Windows\nFirst Seen: 2024-01-15\nUsers: 3 customers" as Device #FFF4E6
+    
+    CustomerA --> Device : "USED_DEVICE\nFirst: 2024-01-15"
+    CustomerB --> Device : "USED_DEVICE\nFirst: 2024-01-16"
+    CustomerC --> Device : "USED_DEVICE\nFirst: 2024-01-17"
+    
+    note right of Device
+        **Suspicious Indicators:**
+        - 3+ unrelated customers
+        - Recent device sharing
+        - Sudden sharing after single-use
+        - High-risk customers
+    end note
+}
+
+package "Shared IP Address Pattern" {
+    rectangle "Account 1\nTransactions: 5" as Account1 #E6F3FF
+    rectangle "Account 2\nTransactions: 8" as Account2 #E6F3FF
+    rectangle "Account 3\nTransactions: 3" as Account3 #E6F3FF
+    
+    rectangle "Shared IP\nIP: 192.168.1.100\nCountry: Unknown\nIs Proxy: true\nIs VPN: false\nRisk Score: 0.85\nAccounts: 3" as IPAddress #FFF4E6
+    
+    Account1 --> IPAddress : "FROM_IP\nMultiple txns"
+    Account2 --> IPAddress : "FROM_IP\nMultiple txns"
+    Account3 --> IPAddress : "FROM_IP\nMultiple txns"
+    
+    note right of IPAddress
+        **Suspicious Indicators:**
+        - Multiple accounts from same IP
+        - Proxy/VPN usage
+        - High-risk IP score
+        - Bot network patterns
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#FFE6E6> | High-Risk Customer |
+    | <#E6F3FF> | Account |
+    | <#FFF4E6> | Shared Infrastructure |
+    | **Device Sharing** | Multiple customers, same device |
+    | **IP Sharing** | Multiple accounts, same IP |
+endlegend
+
+@enduml

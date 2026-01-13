@@ -1,0 +1,43 @@
+@startuml Fan In Pattern
+title Fan-In Pattern - Collection and Consolidation
+
+' This diagram shows many accounts sending money to one destination
+' indicating collection point or consolidation in fraud rings
+
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontSize 12
+
+package "Fan-In Pattern" {
+    rectangle "Sender 1\n$1,500" as S1 #E6F3FF
+    rectangle "Sender 2\n$1,200" as S2 #E6F3FF
+    rectangle "Sender 3\n$1,800" as S3 #E6F3FF
+    rectangle "Sender ...\n..." as SDots #E6F3FF
+    rectangle "Sender 12\n$1,000" as S12 #E6F3FF
+    
+    rectangle "Destination Account\n(Collection Point)\nTotal: $15,000\nTimeframe: 6 hours\nSenders: 12 accounts" as Destination #FFE6E6
+    
+    S1 --> Destination : "Txn1: $1,500\n+0 min"
+    S2 --> Destination : "Txn2: $1,200\n+10 min"
+    S3 --> Destination : "Txn3: $1,800\n+20 min"
+    SDots --> Destination : "..."
+    S12 --> Destination : "Txn12: $1,000\n+110 min"
+    
+    note right of Destination
+        **Pattern Characteristics:**
+        - Many sources, one destination
+        - Similar amounts ($500-$2,000)
+        - Rapid succession (10-20 min apart)
+        - Large total collected
+        - Consolidation point for fraud ring
+    end note
+}
+
+legend right
+    |= Color |= Meaning |
+    | <#E6F3FF> | Sender Accounts (Mules/Victims) |
+    | <#FFE6E6> | Destination Account (Collection) |
+    | **Amount** | Small individual amounts |
+    | **Total** | Large aggregate amount |
+endlegend
+
+@enduml
