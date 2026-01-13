@@ -56,6 +56,41 @@ cp .env.example .env
 
 ### Neo4j Setup
 
+You have two options for setting up Neo4j:
+
+#### Option 1: Using Docker Compose (Recommended)
+
+```bash
+# Start Neo4j using Docker Compose
+docker-compose up -d
+
+# Check if Neo4j is running
+docker-compose ps
+
+# View logs
+docker-compose logs -f neo4j
+
+# Access Neo4j Browser at http://localhost:7474
+# Default credentials:
+#   Username: neo4j
+#   Password: password123
+#   (Change these in production!)
+
+# Stop Neo4j
+docker-compose down
+
+# Stop and remove all data
+docker-compose down -v
+```
+
+**Note**: The Docker Compose setup includes:
+- Neo4j 5.15 with APOC and Graph Data Science plugins
+- Persistent data volumes
+- Health checks
+- Pre-configured memory settings
+
+#### Option 2: Manual Installation
+
 ```bash
 # Install Neo4j (if not already installed)
 # Download from https://neo4j.com/download/
@@ -66,6 +101,10 @@ neo4j start
 # Access Neo4j Browser at http://localhost:7474
 # Set up password when prompted
 ```
+
+**Important**: If using manual installation, ensure Neo4j is running on:
+- HTTP port: 7474
+- Bolt port: 7687
 
 ### Generate Sample Data
 

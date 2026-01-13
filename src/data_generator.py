@@ -253,7 +253,7 @@ class FraudDataGenerator:
         """
         for _ in range(count):
             # Select 3-5 accounts for the circle
-            circle_size = random.randint(3, 5)
+            circle_size = random.randint(3, 7)
             circle_accounts = random.sample(self.accounts, circle_size)
 
             # Use shared device/IP for fraud pattern (suspicious)
