@@ -5,19 +5,40 @@ Generates realistic banking data with embedded fraud patterns.
 
 import random
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from faker import Faker
 import hashlib
+import sys
+import os
 
-from .domain.entities import (
-    Account, Customer, Transaction, Device, IPAddress, Merchant,
-    AccountType, AccountStatus, RiskLevel, KYCStatus,
-    TransactionType, TransactionStatus, TransactionChannel
-)
-from .infrastructure.neo4j_repositories import (
-    Neo4jAccountRepository, Neo4jCustomerRepository,
-    Neo4jTransactionRepository
-)
+# Add parent directory to path to allow imports when running directly
+if __name__ == "__main__":
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Use absolute imports for better debugging support
+try:
+    from src.domain.entities import (
+        Account, Customer, Transaction, Device, IPAddress, Merchant,
+        AccountType, AccountStatus, RiskLevel, KYCStatus,
+        TransactionType, TransactionStatus, TransactionChannel
+    )
+    from src.infrastructure.neo4j_repositories import (
+        Neo4jAccountRepository, Neo4jCustomerRepository,
+        Neo4jTransactionRepository, Neo4jDeviceRepository,
+        Neo4jMerchantRepository, Neo4jIPAddressRepository
+    )
+except ImportError:
+    # Fallback to relative imports if running as a module
+    from .domain.entities import (
+        Account, Customer, Transaction, Device, IPAddress, Merchant,
+        AccountType, AccountStatus, RiskLevel, KYCStatus,
+        TransactionType, TransactionStatus, TransactionChannel
+    )
+    from .infrastructure.neo4j_repositories import (
+        Neo4jAccountRepository, Neo4jCustomerRepository,
+        Neo4jTransactionRepository, Neo4jDeviceRepository,
+        Neo4jMerchantRepository, Neo4jIPAddressRepository
+    )
 
 
 class FraudDataGenerator:
@@ -29,12 +50,16 @@ class FraudDataGenerator:
         self.account_repo = Neo4jAccountRepository()
         self.customer_repo = Neo4jCustomerRepository()
         self.transaction_repo = Neo4jTransactionRepository()
+        self.device_repo = Neo4jDeviceRepository()
+        self.merchant_repo = Neo4jMerchantRepository()
+        self.ip_repo = Neo4jIPAddressRepository()
 
         # Keep track of created entities
         self.customers: List[Customer] = []
         self.accounts: List[Account] = []
         self.devices: List[Device] = []
         self.merchants: List[Merchant] = []
+        self.ip_addresses: Dict[str, IPAddress] = {}  # Track IPs by address string
 
     def generate_complete_dataset(self, num_customers: int = 100,
                                  num_transactions: int = 1000):
@@ -110,12 +135,12 @@ class FraudDataGenerator:
                 self._create_ownership(customer.customer_id, account.account_id)
 
     def _generate_merchants(self, count: int):
-        """Generate merchant records"""
+        """Generate merchant records and save to Neo4j"""
         merchant_categories = ['retail', 'restaurant', 'online', 'gambling',
                               'crypto', 'travel', 'entertainment']
 
         for _ in range(count):
-            self.merchants.append(Merchant(
+            merchant = Merchant(
                 merchant_name=self.faker.company(),
                 category=random.choice(merchant_categories),
                 country=self.faker.country(),
@@ -124,22 +149,34 @@ class FraudDataGenerator:
                     weights=[0.7, 0.2, 0.1]
                 )[0],
                 is_verified=random.choice([True, True, True, False])  # 75% verified
-            ))
+            )
+            saved_merchant = self.merchant_repo.save(merchant)
+            self.merchants.append(saved_merchant)
 
     def _generate_devices(self, count: int):
-        """Generate device records"""
+        """Generate device records, save to Neo4j, and link to customers"""
         device_types = ['mobile', 'desktop', 'tablet']
         operating_systems = ['iOS', 'Android', 'Windows', 'MacOS', 'Linux']
         browsers = ['Chrome', 'Safari', 'Firefox', 'Edge']
 
         for _ in range(count):
-            self.devices.append(Device(
+            device = Device(
                 device_type=random.choice(device_types),
                 os=random.choice(operating_systems),
                 browser=random.choice(browsers),
                 first_seen=self.faker.date_time_between(start_date='-2y', end_date='now'),
+                last_seen=self.faker.date_time_between(start_date='-30d', end_date='now'),
                 is_trusted=random.choice([True, True, True, False])  # 75% trusted
-            ))
+            )
+            saved_device = self.device_repo.save(device)
+            self.devices.append(saved_device)
+            
+            # Link device to 1-3 random customers
+            num_customers = random.randint(1, min(3, len(self.customers)))
+            if self.customers:
+                linked_customers = random.sample(self.customers, num_customers)
+                for customer in linked_customers:
+                    self._link_customer_to_device(customer.customer_id, device.device_id)
 
     def _generate_transactions(self, count: int):
         """Generate normal transaction patterns"""
@@ -149,6 +186,20 @@ class FraudDataGenerator:
             to_account = random.choice([acc for acc in self.accounts
                                        if acc.account_id != from_account.account_id])
 
+            # Select merchant (for payment transactions)
+            merchant = None
+            if random.random() < 0.4 and self.merchants:  # 40% of transactions have merchants
+                merchant = random.choice(self.merchants)
+
+            # Select device (for online/mobile transactions)
+            device = None
+            if random.random() < 0.6 and self.devices:  # 60% of transactions use devices
+                device = random.choice(self.devices)
+
+            # Generate IP address
+            ip_address_str = self.faker.ipv4()
+            ip_address = self._get_or_create_ip_address(ip_address_str)
+
             transaction = Transaction(
                 amount=self._generate_transaction_amount(),
                 timestamp=self.faker.date_time_between(start_date='-90d', end_date='now'),
@@ -157,11 +208,12 @@ class FraudDataGenerator:
                 description=self.faker.sentence(nb_words=6),
                 from_account_id=from_account.account_id,
                 to_account_id=to_account.account_id,
-                merchant_id=random.choice(self.merchants).merchant_id if self.merchants else None,
-                device_id=random.choice(self.devices).device_id if self.devices else None,
-                ip_address=self.faker.ipv4()
+                merchant_id=merchant.merchant_id if merchant else None,
+                device_id=device.device_id if device else None,
+                ip_address=ip_address_str
             )
 
+            # Save transaction - repository will automatically create all relationships
             self.transaction_repo.save(transaction)
 
     def _generate_transaction_amount(self) -> float:
@@ -204,6 +256,10 @@ class FraudDataGenerator:
             circle_size = random.randint(3, 5)
             circle_accounts = random.sample(self.accounts, circle_size)
 
+            # Use shared device/IP for fraud pattern (suspicious)
+            shared_device = random.choice(self.devices) if self.devices else None
+            shared_ip = self._get_or_create_ip_address(self.faker.ipv4(), is_suspicious=True)
+
             base_time = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 7))
             initial_amount = random.uniform(5000, 20000)
 
@@ -231,9 +287,12 @@ class FraudDataGenerator:
                         description=f"Transfer - Round {round_num + 1}",
                         from_account_id=from_acc.account_id,
                         to_account_id=to_acc.account_id,
+                        device_id=shared_device.device_id if shared_device else None,
+                        ip_address=shared_ip.ip_address,
                         is_flagged=True,
                         fraud_score=random.uniform(0.75, 0.95)
                     )
+                    # Save transaction - repository will automatically create all relationships
                     self.transaction_repo.save(transaction)
 
     def _inject_fan_out(self, count: int):
@@ -245,6 +304,10 @@ class FraudDataGenerator:
                 [acc for acc in self.accounts if acc.account_id != source_account.account_id],
                 num_recipients
             )
+
+            # Use same device/IP for all transactions (suspicious pattern)
+            shared_device = random.choice(self.devices) if self.devices else None
+            shared_ip = self._get_or_create_ip_address(self.faker.ipv4(), is_suspicious=True)
 
             base_time = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 7))
             base_amount = random.uniform(10000, 50000)
@@ -258,9 +321,12 @@ class FraudDataGenerator:
                     description="Distribution",
                     from_account_id=source_account.account_id,
                     to_account_id=recipient.account_id,
+                    device_id=shared_device.device_id if shared_device else None,
+                    ip_address=shared_ip.ip_address,
                     is_flagged=True,
                     fraud_score=random.uniform(0.6, 0.9)
                 )
+                # Save transaction - repository will automatically create all relationships
                 self.transaction_repo.save(transaction)
 
     def _inject_fan_in(self, count: int):
@@ -273,9 +339,18 @@ class FraudDataGenerator:
                 num_senders
             )
 
+            # Use high-risk merchant for some transactions
+            high_risk_merchant = random.choice([m for m in self.merchants if m.risk_level in [RiskLevel.HIGH, RiskLevel.CRITICAL]]) if self.merchants else None
+            if not high_risk_merchant and self.merchants:
+                high_risk_merchant = random.choice(self.merchants)
+
             base_time = datetime.now(timezone.utc) - timedelta(days=random.randint(1, 7))
 
             for i, sender in enumerate(sender_accounts):
+                # Vary devices/IPs slightly but some overlap (suspicious)
+                device = random.choice(self.devices) if self.devices and random.random() < 0.7 else None
+                ip = self._get_or_create_ip_address(self.faker.ipv4(), is_suspicious=random.random() < 0.5)
+
                 transaction = Transaction(
                     amount=random.uniform(500, 2000),
                     timestamp=base_time + timedelta(minutes=i * 10),
@@ -284,9 +359,13 @@ class FraudDataGenerator:
                     description="Collection",
                     from_account_id=sender.account_id,
                     to_account_id=destination_account.account_id,
+                    merchant_id=high_risk_merchant.merchant_id if high_risk_merchant and random.random() < 0.3 else None,
+                    device_id=device.device_id if device else None,
+                    ip_address=ip.ip_address,
                     is_flagged=True,
                     fraud_score=random.uniform(0.6, 0.9)
                 )
+                # Save transaction - repository will automatically create all relationships
                 self.transaction_repo.save(transaction)
 
     def _inject_velocity_pattern(self, count: int):
@@ -295,12 +374,20 @@ class FraudDataGenerator:
             account = random.choice(self.accounts)
             base_time = datetime.now(timezone.utc) - timedelta(hours=2)
 
+            # Use same device for all rapid transactions (suspicious)
+            device = random.choice(self.devices) if self.devices else None
+            # Use same or similar IPs (suspicious)
+            base_ip = self._get_or_create_ip_address(self.faker.ipv4(), is_suspicious=True)
+
             # Create 10-20 transactions in quick succession
             num_transactions = random.randint(10, 20)
 
             for i in range(num_transactions):
                 to_account = random.choice([acc for acc in self.accounts
                                            if acc.account_id != account.account_id])
+
+                # Sometimes use same IP, sometimes vary slightly
+                ip = base_ip if random.random() < 0.7 else self._get_or_create_ip_address(self.faker.ipv4())
 
                 transaction = Transaction(
                     amount=random.uniform(100, 1000),
@@ -310,14 +397,20 @@ class FraudDataGenerator:
                     description="Quick transfer",
                     from_account_id=account.account_id,
                     to_account_id=to_account.account_id,
+                    device_id=device.device_id if device else None,
+                    ip_address=ip.ip_address,
                     is_flagged=True,
                     fraud_score=random.uniform(0.5, 0.8)
                 )
+                # Save transaction - repository will automatically create all relationships
                 self.transaction_repo.save(transaction)
 
     def _create_ownership(self, customer_id: str, account_id: str):
         """Create OWNS relationship between customer and account"""
-        from .infrastructure.neo4j_connection import Neo4jConnection
+        try:
+            from src.infrastructure.neo4j_connection import Neo4jConnection
+        except ImportError:
+            from .infrastructure.neo4j_connection import Neo4jConnection
         connection = Neo4jConnection()
 
         with connection.get_session() as session:
@@ -327,12 +420,111 @@ class FraudDataGenerator:
                 MERGE (c)-[:OWNS {since_date: datetime(), relationship_type: 'primary'}]->(a)
             """, customer_id=customer_id, account_id=account_id)
 
+    def _get_or_create_ip_address(self, ip_address_str: str, is_suspicious: bool = False) -> IPAddress:
+        """Get existing IP address or create a new one"""
+        if ip_address_str in self.ip_addresses:
+            return self.ip_addresses[ip_address_str]
+        
+        # Create new IP address
+        ip_address = IPAddress(
+            ip_address=ip_address_str,
+            country=self.faker.country(),
+            city=self.faker.city(),
+            is_proxy=is_suspicious and random.random() < 0.3,  # 30% of suspicious IPs are proxies
+            is_vpn=is_suspicious and random.random() < 0.2,  # 20% of suspicious IPs are VPNs
+            risk_score=random.uniform(0.6, 0.95) if is_suspicious else random.uniform(0.0, 0.4),
+            first_seen=self.faker.date_time_between(start_date='-90d', end_date='now'),
+            last_seen=datetime.now(timezone.utc)
+        )
+        saved_ip = self.ip_repo.save(ip_address)
+        self.ip_addresses[ip_address_str] = saved_ip
+        return saved_ip
+
+    def _link_customer_to_device(self, customer_id: str, device_id: str):
+        """Create USED_DEVICE relationship between customer and device"""
+        try:
+            from src.infrastructure.neo4j_connection import Neo4jConnection
+        except ImportError:
+            from .infrastructure.neo4j_connection import Neo4jConnection
+        connection = Neo4jConnection()
+
+        with connection.get_session() as session:
+            session.run("""
+                MATCH (c:Customer {customer_id: $customer_id})
+                MATCH (d:Device {device_id: $device_id})
+                MERGE (c)-[rel:USED_DEVICE]->(d)
+                ON CREATE SET rel.first_used = datetime(),
+                             rel.last_used = datetime(),
+                             rel.usage_count = 1
+                ON MATCH SET rel.last_used = datetime(),
+                            rel.usage_count = rel.usage_count + 1
+            """, customer_id=customer_id, device_id=device_id)
+
+    def _link_transaction_to_merchant(self, transaction_id: str, merchant_id: str):
+        """Create SENT_TO relationship between transaction and merchant"""
+        try:
+            from src.infrastructure.neo4j_connection import Neo4jConnection
+        except ImportError:
+            from .infrastructure.neo4j_connection import Neo4jConnection
+        connection = Neo4jConnection()
+
+        with connection.get_session() as session:
+            session.run("""
+                MATCH (t:Transaction {transaction_id: $transaction_id})
+                MATCH (m:Merchant {merchant_id: $merchant_id})
+                MERGE (t)-[:SENT_TO {timestamp: t.timestamp}]->(m)
+            """, transaction_id=transaction_id, merchant_id=merchant_id)
+
+    def _link_transaction_to_device(self, transaction_id: str, device_id: str):
+        """Create FROM_DEVICE relationship between transaction and device"""
+        try:
+            from src.infrastructure.neo4j_connection import Neo4jConnection
+        except ImportError:
+            from .infrastructure.neo4j_connection import Neo4jConnection
+        connection = Neo4jConnection()
+
+        with connection.get_session() as session:
+            session.run("""
+                MATCH (t:Transaction {transaction_id: $transaction_id})
+                MATCH (d:Device {device_id: $device_id})
+                MERGE (t)-[:FROM_DEVICE {timestamp: t.timestamp}]->(d)
+            """, transaction_id=transaction_id, device_id=device_id)
+            
+            # Update device last_seen
+            session.run("""
+                MATCH (d:Device {device_id: $device_id})
+                MATCH (t:Transaction {transaction_id: $transaction_id})
+                SET d.last_seen = t.timestamp
+            """, device_id=device_id, transaction_id=transaction_id)
+
+    def _link_transaction_to_ip(self, transaction_id: str, ip_address: str):
+        """Create FROM_IP relationship between transaction and IP address"""
+        try:
+            from src.infrastructure.neo4j_connection import Neo4jConnection
+        except ImportError:
+            from .infrastructure.neo4j_connection import Neo4jConnection
+        connection = Neo4jConnection()
+
+        with connection.get_session() as session:
+            session.run("""
+                MATCH (t:Transaction {transaction_id: $transaction_id})
+                MATCH (ip:IPAddress {ip_address: $ip_address})
+                MERGE (t)-[:FROM_IP {timestamp: t.timestamp}]->(ip)
+            """, transaction_id=transaction_id, ip_address=ip_address)
+            
+            # Update IP last_seen
+            session.run("""
+                MATCH (ip:IPAddress {ip_address: $ip_address})
+                MATCH (t:Transaction {transaction_id: $transaction_id})
+                SET ip.last_seen = t.timestamp
+            """, ip_address=ip_address, transaction_id=transaction_id)
+
 
 def main():
     """Main function to run data generation"""
     print("=== Fraud Detection Data Generator ===\n")
 
-    generator = FraudDataGenerator(fraud_percentage=0.05)
+    generator = FraudDataGenerator(fraud_percentage=0.25)
 
     # Generate dataset
     generator.generate_complete_dataset(

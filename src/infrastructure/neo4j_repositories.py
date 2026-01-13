@@ -200,7 +200,7 @@ class Neo4jTransactionRepository(ITransactionRepository):
                 'fraud_score': transaction.fraud_score
             })
 
-            # Create relationships
+            # Create relationships to accounts
             if transaction.from_account_id:
                 session.run("""
                     MATCH (t:Transaction {transaction_id: $transaction_id})
@@ -216,6 +216,35 @@ class Neo4jTransactionRepository(ITransactionRepository):
                     MERGE (t)-[:CREDITED_TO]->(a)
                 """, transaction_id=transaction.transaction_id,
                            to_account_id=transaction.to_account_id)
+
+            # Create relationship to merchant
+            if transaction.merchant_id:
+                session.run("""
+                    MATCH (t:Transaction {transaction_id: $transaction_id})
+                    MATCH (m:Merchant {merchant_id: $merchant_id})
+                    MERGE (t)-[:SENT_TO {timestamp: t.timestamp}]->(m)
+                """, transaction_id=transaction.transaction_id,
+                           merchant_id=transaction.merchant_id)
+
+            # Create relationship to device
+            if transaction.device_id:
+                session.run("""
+                    MATCH (t:Transaction {transaction_id: $transaction_id})
+                    MATCH (d:Device {device_id: $device_id})
+                    MERGE (t)-[:FROM_DEVICE {timestamp: t.timestamp}]->(d)
+                    SET d.last_seen = t.timestamp
+                """, transaction_id=transaction.transaction_id,
+                           device_id=transaction.device_id)
+
+            # Create relationship to IP address
+            if transaction.ip_address:
+                session.run("""
+                    MATCH (t:Transaction {transaction_id: $transaction_id})
+                    MATCH (ip:IPAddress {ip_address: $ip_address})
+                    MERGE (t)-[:FROM_IP {timestamp: t.timestamp}]->(ip)
+                    SET ip.last_seen = t.timestamp
+                """, transaction_id=transaction.transaction_id,
+                           ip_address=transaction.ip_address)
 
             return transaction
 
@@ -454,80 +483,364 @@ class Neo4jGraphQueryRepository(IGraphQueryRepository):
 
 # Placeholder implementations for other repositories
 class Neo4jDeviceRepository(IDeviceRepository):
+    """Neo4j implementation of Device repository"""
+
     def __init__(self):
         self.connection = Neo4jConnection()
 
     def save(self, device: Device) -> Device:
-        # Implementation similar to above
-        return device
+        """Save a device to Neo4j"""
+        with self.connection.get_session() as session:
+            query = """
+            MERGE (d:Device {device_id: $device_id})
+            SET d.device_type = $device_type,
+                d.os = $os,
+                d.browser = $browser,
+                d.first_seen = datetime($first_seen),
+                d.last_seen = datetime($last_seen),
+                d.is_trusted = $is_trusted
+            RETURN d
+            """
+            params = {
+                'device_id': device.device_id,
+                'device_type': device.device_type,
+                'os': device.os,
+                'browser': device.browser,
+                'first_seen': device.first_seen.isoformat(),
+                'last_seen': device.last_seen.isoformat(),
+                'is_trusted': device.is_trusted
+            }
+            session.run(query, **params)
+            return device
 
     def find_by_id(self, device_id: str) -> Optional[Device]:
-        return None
+        """Find device by ID"""
+        with self.connection.get_session() as session:
+            query = "MATCH (d:Device {device_id: $device_id}) RETURN d"
+            result = session.run(query, device_id=device_id)
+            record = result.single()
+            if record:
+                return self._node_to_device(record['d'])
+            return None
 
     def find_shared_devices(self, min_users: int = 2) -> List[tuple[Device, int]]:
-        return []
+        """Find devices shared by multiple users (customers)"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (c:Customer)-[:USED_DEVICE]->(d:Device)
+            WITH d, count(DISTINCT c) as user_count
+            WHERE user_count >= $min_users
+            RETURN d, user_count
+            ORDER BY user_count DESC
+            """
+            result = session.run(query, min_users=min_users)
+            shared_devices = []
+            for record in result:
+                device = self._node_to_device(record['d'])
+                user_count = record['user_count']
+                shared_devices.append((device, user_count))
+            return shared_devices
+
+    def _node_to_device(self, node) -> Device:
+        """Convert Neo4j node to Device entity"""
+        data = dict(node)
+        # Convert datetime objects
+        for field in ['first_seen', 'last_seen']:
+            if field in data and hasattr(data[field], 'to_native'):
+                data[field] = data[field].to_native()
+        return Device(**data)
 
 
 class Neo4jIPAddressRepository(IIPAddressRepository):
+    """Neo4j implementation of IP Address repository"""
+
     def __init__(self):
         self.connection = Neo4jConnection()
 
     def save(self, ip: IPAddress) -> IPAddress:
-        return ip
+        """Save an IP address to Neo4j"""
+        with self.connection.get_session() as session:
+            query = """
+            MERGE (ip:IPAddress {ip_address: $ip_address})
+            SET ip.country = $country,
+                ip.city = $city,
+                ip.is_proxy = $is_proxy,
+                ip.is_vpn = $is_vpn,
+                ip.risk_score = $risk_score,
+                ip.first_seen = datetime($first_seen),
+                ip.last_seen = datetime($last_seen)
+            RETURN ip
+            """
+            params = {
+                'ip_address': ip.ip_address,
+                'country': ip.country,
+                'city': ip.city,
+                'is_proxy': ip.is_proxy,
+                'is_vpn': ip.is_vpn,
+                'risk_score': ip.risk_score,
+                'first_seen': ip.first_seen.isoformat(),
+                'last_seen': ip.last_seen.isoformat()
+            }
+            session.run(query, **params)
+            return ip
 
     def find_by_address(self, ip_address: str) -> Optional[IPAddress]:
-        return None
+        """Find IP address by IP address string"""
+        with self.connection.get_session() as session:
+            query = "MATCH (ip:IPAddress {ip_address: $ip_address}) RETURN ip"
+            result = session.run(query, ip_address=ip_address)
+            record = result.single()
+            if record:
+                return self._node_to_ip_address(record['ip'])
+            return None
 
     def find_high_risk_ips(self, threshold: float = 0.7) -> List[IPAddress]:
-        return []
+        """Find IP addresses with risk score above threshold"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (ip:IPAddress)
+            WHERE ip.risk_score >= $threshold
+            RETURN ip
+            ORDER BY ip.risk_score DESC
+            """
+            result = session.run(query, threshold=threshold)
+            return [self._node_to_ip_address(record['ip']) for record in result]
+
+    def _node_to_ip_address(self, node) -> IPAddress:
+        """Convert Neo4j node to IPAddress entity"""
+        data = dict(node)
+        # Convert datetime objects
+        for field in ['first_seen', 'last_seen']:
+            if field in data and hasattr(data[field], 'to_native'):
+                data[field] = data[field].to_native()
+        return IPAddress(**data)
 
 
 class Neo4jMerchantRepository(IMerchantRepository):
+    """Neo4j implementation of Merchant repository"""
+
     def __init__(self):
         self.connection = Neo4jConnection()
 
     def save(self, merchant: Merchant) -> Merchant:
-        return merchant
+        """Save a merchant to Neo4j"""
+        with self.connection.get_session() as session:
+            query = """
+            MERGE (m:Merchant {merchant_id: $merchant_id})
+            SET m.merchant_name = $merchant_name,
+                m.category = $category,
+                m.country = $country,
+                m.risk_level = $risk_level,
+                m.is_verified = $is_verified
+            RETURN m
+            """
+            params = {
+                'merchant_id': merchant.merchant_id,
+                'merchant_name': merchant.merchant_name,
+                'category': merchant.category,
+                'country': merchant.country,
+                'risk_level': merchant.risk_level,
+                'is_verified': merchant.is_verified
+            }
+            session.run(query, **params)
+            return merchant
 
     def find_by_id(self, merchant_id: str) -> Optional[Merchant]:
-        return None
+        """Find merchant by ID"""
+        with self.connection.get_session() as session:
+            query = "MATCH (m:Merchant {merchant_id: $merchant_id}) RETURN m"
+            result = session.run(query, merchant_id=merchant_id)
+            record = result.single()
+            if record:
+                return self._node_to_merchant(record['m'])
+            return None
 
     def find_by_name(self, name: str) -> List[Merchant]:
-        return []
+        """Find merchants by name (case-insensitive partial match)"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (m:Merchant)
+            WHERE toLower(m.merchant_name) CONTAINS toLower($name)
+            RETURN m
+            ORDER BY m.merchant_name
+            """
+            result = session.run(query, name=name)
+            return [self._node_to_merchant(record['m']) for record in result]
+
+    def _node_to_merchant(self, node) -> Merchant:
+        """Convert Neo4j node to Merchant entity"""
+        data = dict(node)
+        return Merchant(**data)
 
 
 class Neo4jFraudRingRepository(IFraudRingRepository):
+    """Neo4j implementation of Fraud Ring repository"""
+
     def __init__(self):
         self.connection = Neo4jConnection()
 
     def save(self, fraud_ring: FraudRing) -> FraudRing:
-        return fraud_ring
+        """Save a fraud ring to Neo4j"""
+        with self.connection.get_session() as session:
+            query = """
+            MERGE (r:FraudRing {ring_id: $ring_id})
+            SET r.detected_date = datetime($detected_date),
+                r.confidence_score = $confidence_score,
+                r.status = $status,
+                r.total_amount = $total_amount,
+                r.member_count = $member_count,
+                r.pattern_type = $pattern_type,
+                r.description = $description
+            RETURN r
+            """
+            params = {
+                'ring_id': fraud_ring.ring_id,
+                'detected_date': fraud_ring.detected_date.isoformat(),
+                'confidence_score': fraud_ring.confidence_score,
+                'status': fraud_ring.status,
+                'total_amount': fraud_ring.total_amount,
+                'member_count': fraud_ring.member_count,
+                'pattern_type': fraud_ring.pattern_type,
+                'description': fraud_ring.description
+            }
+            session.run(query, **params)
+            return fraud_ring
 
     def find_by_id(self, ring_id: str) -> Optional[FraudRing]:
-        return None
+        """Find fraud ring by ID"""
+        with self.connection.get_session() as session:
+            query = "MATCH (r:FraudRing {ring_id: $ring_id}) RETURN r"
+            result = session.run(query, ring_id=ring_id)
+            record = result.single()
+            if record:
+                return self._node_to_fraud_ring(record['r'])
+            return None
 
     def find_active_rings(self) -> List[FraudRing]:
-        return []
+        """Find all active fraud rings under investigation"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (r:FraudRing)
+            WHERE r.status IN ['investigating', 'confirmed']
+            RETURN r
+            ORDER BY r.detected_date DESC
+            """
+            result = session.run(query)
+            return [self._node_to_fraud_ring(record['r']) for record in result]
 
     def link_customer_to_ring(self, ring_id: str, customer_id: str, role: str) -> None:
-        pass
+        """Link a customer to a fraud ring"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (c:Customer {customer_id: $customer_id})
+            MATCH (r:FraudRing {ring_id: $ring_id})
+            MERGE (c)-[rel:MEMBER_OF]->(r)
+            SET rel.role = $role,
+                rel.joined_date = coalesce(rel.joined_date, datetime())
+            WITH r
+            MATCH (r)<-[:MEMBER_OF]-(member:Customer)
+            SET r.member_count = count(DISTINCT member)
+            """
+            session.run(query, customer_id=customer_id, ring_id=ring_id, role=role)
 
     def link_account_to_ring(self, ring_id: str, account_id: str, role: str) -> None:
-        pass
+        """Link an account to a fraud ring"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (a:Account {account_id: $account_id})
+            MATCH (r:FraudRing {ring_id: $ring_id})
+            MERGE (a)-[rel:USED_IN]->(r)
+            SET rel.role = $role,
+                rel.linked_date = coalesce(rel.linked_date, datetime())
+            """
+            session.run(query, account_id=account_id, ring_id=ring_id, role=role)
+
+    def _node_to_fraud_ring(self, node) -> FraudRing:
+        """Convert Neo4j node to FraudRing entity"""
+        data = dict(node)
+        # Convert datetime objects
+        if 'detected_date' in data and hasattr(data['detected_date'], 'to_native'):
+            data['detected_date'] = data['detected_date'].to_native()
+        return FraudRing(**data)
 
 
 class Neo4jAlertRepository(IAlertRepository):
+    """Neo4j implementation of Alert repository"""
+
     def __init__(self):
         self.connection = Neo4jConnection()
 
     def save(self, alert: Alert) -> Alert:
-        return alert
+        """Save an alert to Neo4j"""
+        with self.connection.get_session() as session:
+            query = """
+            MERGE (a:Alert {alert_id: $alert_id})
+            SET a.alert_type = $alert_type,
+                a.severity = $severity,
+                a.created_at = datetime($created_at),
+                a.resolved_at = CASE WHEN $resolved_at IS NOT NULL THEN datetime($resolved_at) ELSE null END,
+                a.is_resolved = $is_resolved,
+                a.assigned_to = $assigned_to,
+                a.notes = $notes,
+                a.related_entities = $related_entities
+            RETURN a
+            """
+            params = {
+                'alert_id': alert.alert_id,
+                'alert_type': alert.alert_type,
+                'severity': alert.severity,
+                'created_at': alert.created_at.isoformat(),
+                'resolved_at': alert.resolved_at.isoformat() if alert.resolved_at else None,
+                'is_resolved': alert.is_resolved,
+                'assigned_to': alert.assigned_to,
+                'notes': alert.notes,
+                'related_entities': alert.related_entities
+            }
+            session.run(query, **params)
+            return alert
 
     def find_by_id(self, alert_id: str) -> Optional[Alert]:
-        return None
+        """Find alert by ID"""
+        with self.connection.get_session() as session:
+            query = "MATCH (a:Alert {alert_id: $alert_id}) RETURN a"
+            result = session.run(query, alert_id=alert_id)
+            record = result.single()
+            if record:
+                return self._node_to_alert(record['a'])
+            return None
 
     def find_unresolved_alerts(self) -> List[Alert]:
-        return []
+        """Find all unresolved alerts"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (a:Alert)
+            WHERE a.is_resolved = false
+            RETURN a
+            ORDER BY a.created_at DESC
+            """
+            result = session.run(query)
+            return [self._node_to_alert(record['a']) for record in result]
 
     def find_by_severity(self, severity: str) -> List[Alert]:
-        return []
+        """Find alerts by severity level"""
+        with self.connection.get_session() as session:
+            query = """
+            MATCH (a:Alert)
+            WHERE a.severity = $severity
+            RETURN a
+            ORDER BY a.created_at DESC
+            """
+            result = session.run(query, severity=severity)
+            return [self._node_to_alert(record['a']) for record in result]
+
+    def _node_to_alert(self, node) -> Alert:
+        """Convert Neo4j node to Alert entity"""
+        data = dict(node)
+        # Convert datetime objects
+        for field in ['created_at', 'resolved_at']:
+            if field in data and data[field] is not None and hasattr(data[field], 'to_native'):
+                data[field] = data[field].to_native()
+        # Ensure related_entities is a list
+        if 'related_entities' in data and data['related_entities'] is None:
+            data['related_entities'] = []
+        return Alert(**data)

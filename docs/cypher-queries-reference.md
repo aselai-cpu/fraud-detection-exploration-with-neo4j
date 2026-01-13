@@ -448,11 +448,11 @@ RETURN count(t) as count
 
 ## Fraud Pattern Detection Queries
 
-### 16. Detect Circular Flow (Money Laundering)
+### 16. Detect Circular Flow (Money Laundering) - Fixed 3-Hop Pattern
 
-**Purpose:** Find circular money flows indicating layering in money laundering.
+**Purpose:** Find circular money flows with exactly 3 hops, indicating layering in money laundering.
 
-**Location:** `neo4j_repositories.py:281-294`
+**Location:** `neo4j_repositories.py:301-314`
 
 ```cypher
 MATCH path = (start:Account)
@@ -471,8 +471,8 @@ LIMIT 100
 ```
 
 **Explanation:**
-- **Circular Flow Pattern:** Money moves A → B → C → A
-- Requires 3-hop cycle minimum
+- **Circular Flow Pattern:** Money moves A → B → C → A (exactly 3 hops)
+- Fixed-length pattern for specific detection scenarios
 - All transactions must be flagged (pre-screened as suspicious)
 - Ensures all accounts in cycle are different (no self-loops)
 - Returns transaction list for evidence trail
@@ -492,6 +492,227 @@ LIMIT 100
 - Multiple rounds make pattern more obvious
 - Amount typically decreases each hop (simulated fees)
 - Short timeframes (hours/days) indicate urgency
+
+**Limitations:**
+- Only detects exactly 3-hop cycles
+- Requires all transactions to be pre-flagged
+- Fixed pattern may miss longer cycles
+
+---
+
+### 16a. Detect Generic Circular Flow with Customer Return Pattern
+
+**Purpose:** Find cycles of any size where the difference between debited and credited amounts is less than 10%, indicating money laundering with near-complete return (funds flow out and back with minimal loss).
+
+**Location:** Custom query (not yet in repositories)
+
+**Recommended Version (2-Hop Cycle - Simple and Efficient):**
+
+```cypher
+MATCH (c:Customer)-[:OWNS]->(start:Account)
+MATCH (start)<-[:DEBITED_FROM]-(t_out:Transaction)-[:CREDITED_TO]->(intermediate:Account)
+MATCH (intermediate)<-[:DEBITED_FROM]-(t_in:Transaction)-[:CREDITED_TO]->(end:Account)
+MATCH (c)-[:OWNS]->(end)
+WHERE start <> end
+  AND intermediate <> start
+  AND intermediate <> end
+  AND t_out.amount > 0
+  AND t_in.amount > 0
+WITH c, start, end, t_out, t_in,
+     t_out.amount as debit_amount,
+     t_in.amount as credit_amount
+WHERE abs(debit_amount - credit_amount) / debit_amount < 0.10
+RETURN c.customer_id,
+       start.account_id as source_account,
+       end.account_id as return_account,
+       debit_amount as total_debited,
+       credit_amount as total_credited,
+       abs(debit_amount - credit_amount) as difference,
+       round((abs(debit_amount - credit_amount) / debit_amount * 100), 2) as difference_percentage,
+       2 as cycle_length
+ORDER BY difference_percentage ASC, debit_amount DESC
+LIMIT 100
+```
+
+**Advanced Version (3-Hop Cycle with Aggregation):**
+
+```cypher
+MATCH (c:Customer)-[:OWNS]->(start:Account)
+MATCH (start)<-[:DEBITED_FROM]-(t1:Transaction)-[:CREDITED_TO]->(a2:Account)
+MATCH (a2)<-[:DEBITED_FROM]-(t2:Transaction)-[:CREDITED_TO]->(a3:Account)
+MATCH (a3)<-[:DEBITED_FROM]-(t3:Transaction)-[:CREDITED_TO]->(end:Account)
+MATCH (c)-[:OWNS]->(end)
+WHERE start <> end
+  AND a2 <> start AND a2 <> end
+  AND a3 <> start AND a3 <> end
+  AND t1.amount > 0
+  AND t3.amount > 0
+WITH c, start, end, t1, t3,
+     t1.amount as total_debited,
+     t3.amount as total_credited
+WHERE abs(total_debited - total_credited) / total_debited < 0.10
+RETURN c.customer_id,
+       start.account_id as source_account,
+       end.account_id as return_account,
+       total_debited,
+       total_credited,
+       abs(total_debited - total_credited) as difference,
+       round((abs(total_debited - total_credited) / total_debited * 100), 2) as difference_percentage,
+       3 as cycle_length
+ORDER BY difference_percentage ASC, total_debited DESC
+LIMIT 100
+```
+
+**Multi-Hop Version (Variable Length Cycles):**
+
+```cypher
+MATCH (c:Customer)-[:OWNS]->(start:Account)
+MATCH path = (start)<-[:DEBITED_FROM]-(t1:Transaction)-[:CREDITED_TO]->(:Account)
+    <-[:DEBITED_FROM*0..3]-(:Transaction)-[:CREDITED_TO*0..3]->(end:Account)
+MATCH (c)-[:OWNS]->(end)
+MATCH (start)<-[:DEBITED_FROM]-(t_debit:Transaction)
+MATCH (end)<-[:CREDITED_TO]-(t_credit:Transaction)
+WHERE start <> end
+  AND length(path) >= 2
+  AND length(path) <= 10
+  AND t_debit.amount > 0
+  AND t_credit.amount > 0
+WITH c, start, end, path, t_debit, t_credit,
+     t_debit.amount as total_debited,
+     t_credit.amount as total_credited
+WHERE abs(total_debited - total_credited) / total_debited < 0.10
+RETURN c.customer_id,
+       start.account_id as source_account,
+       end.account_id as return_account,
+       total_debited,
+       total_credited,
+       abs(total_debited - total_credited) as difference,
+       round((abs(total_debited - total_credited) / total_debited * 100), 2) as difference_percentage,
+       length(path) as cycle_length
+ORDER BY difference_percentage ASC, total_debited DESC
+LIMIT 100
+```
+
+**Comprehensive Version (Tracks All Transactions in Cycle):**
+
+```cypher
+MATCH (c:Customer)-[:OWNS]->(start:Account)
+MATCH (start)<-[:DEBITED_FROM]-(t_out:Transaction)-[:CREDITED_TO]->(a2:Account)
+MATCH (a2)<-[:DEBITED_FROM]-(t_mid:Transaction)-[:CREDITED_TO]->(a3:Account)
+MATCH (a3)<-[:DEBITED_FROM]-(t_in:Transaction)-[:CREDITED_TO]->(end:Account)
+MATCH (c)-[:OWNS]->(end)
+WHERE start <> end
+  AND a2 <> start AND a2 <> end
+  AND a3 <> start AND a3 <> end
+WITH c, start, end, t_out, t_in,
+     t_out.amount as debit_amount,
+     t_in.amount as credit_amount
+WHERE abs(debit_amount - credit_amount) / debit_amount < 0.10
+RETURN c.customer_id,
+       start.account_id as source_account,
+       end.account_id as return_account,
+       debit_amount as total_debited,
+       credit_amount as total_credited,
+       abs(debit_amount - credit_amount) as difference,
+       round((abs(debit_amount - credit_amount) / debit_amount * 100), 2) as difference_percentage,
+       3 as cycle_length,
+       t_out.transaction_id as debit_transaction_id,
+       t_in.transaction_id as credit_transaction_id
+ORDER BY difference_percentage ASC, debit_amount DESC
+LIMIT 100
+```
+
+**APOC Version (Using APOC Path Expansion for Variable Cycles - Optional):**
+
+```cypher
+// Requires APOC library
+MATCH (c:Customer)-[:OWNS]->(start:Account)
+CALL apoc.path.expandConfig(start, {
+    relationshipFilter: 'DEBITED_FROM>,CREDITED_TO>',
+    labelFilter: '+Account|+Transaction',
+    minLevel: 2,
+    maxLevel: 10,
+    uniqueness: 'NODE_PATH'
+}) YIELD path
+WITH c, start, path, 
+     last(nodes(path)) as end
+WHERE end:Account
+MATCH (c)-[:OWNS]->(end)
+WHERE start <> end
+WITH c, start, end, path, nodes(path) as path_nodes
+WITH c, start, end, path, path_nodes,
+     [node IN path_nodes WHERE node:Transaction AND 
+      EXISTS((node)-[:DEBITED_FROM]->(start)) | node.amount] as debits,
+     [node IN path_nodes WHERE node:Transaction AND 
+      EXISTS((node)-[:CREDITED_TO]->(end)) | node.amount] as credits
+WITH c, start, end, path,
+     reduce(total = 0.0, amt IN debits | total + amt) as total_debited,
+     reduce(total = 0.0, amt IN credits | total + amt) as total_credited
+WHERE total_debited > 0
+  AND abs(total_debited - total_credited) / total_debited < 0.10
+RETURN c.customer_id,
+       start.account_id as source_account,
+       end.account_id as return_account,
+       total_debited,
+       total_credited,
+       abs(total_debited - total_credited) as difference,
+       round((abs(total_debited - total_credited) / total_debited * 100), 2) as difference_percentage,
+       length(path) as cycle_length
+ORDER BY difference_percentage ASC, total_debited DESC
+LIMIT 100
+```
+
+**Explanation:**
+- **Generic Cycle Detection:** Finds cycles of any length (2-10 hops) instead of fixed 3-hop pattern
+- **Customer-Centric:** Tracks cycles where money returns to the same customer (may be different accounts)
+- **Difference Calculation:** Calculates absolute difference between debited and credited amounts
+- **10% Threshold:** Flags cycles where difference is less than 10% of debited amount (near-complete return)
+- **Variable-Length Paths:** Uses variable-length patterns to find cycles of different sizes
+- **Amount Aggregation:** Sums all debits from customer's accounts and credits back to customer's accounts
+
+**Mathematical Condition:**
+```
+abs(debit_amount - credit_amount) / debit_amount < 0.10
+```
+This means the difference must be less than 10% of the debited amount.
+
+**Graph Pattern:**
+```
+(Customer)
+    |
+    v
+(Account-A) --[Debit $10k]--> (Account-B) --[Debit $9.5k]--> (Account-C) --[Credit $9.2k]--> (Account-A)
+                                                                                              ^
+                                                                                              |
+                                                                                         (Customer owns)
+Difference: $800 (8% of $10k) - SUSPICIOUS
+```
+
+**Real-World Example:**
+- Customer debits $10,000 from Account-A
+- Money flows: A → B → C → D → A
+- Customer receives $9,200 back to Account-A
+- Difference: $800 (8% of $10,000) - **Suspicious** (within 10% threshold)
+- This indicates layering where most money returns with minimal loss
+
+**Detection Strategy:**
+- Detects money laundering where funds return to originator with minimal difference
+- Small difference (<10%) indicates layering, not real commerce
+- Variable cycle length catches complex laundering schemes
+- Customer-level aggregation catches multi-account fraud
+- Lower difference percentage = more suspicious (money laundering vs. legitimate transactions)
+
+**Parameters:**
+- `min_cycle_length`: Minimum path length (default 2)
+- `max_cycle_length`: Maximum path length (default 10)
+- `difference_threshold`: Maximum difference percentage (default 0.10 = 10%)
+
+**Use Cases:**
+- Detect sophisticated money laundering with multiple hops
+- Find customers who structure transactions to return funds with minimal loss
+- Identify layering schemes where money circulates and returns
+- Compliance investigations for suspicious circular flows
+- Detect mule accounts with near-perfect throughput
 
 ---
 
